@@ -26,7 +26,11 @@ func main() {
 		}
 
 		// Create a new request to the target
-		proxyReq, err := http.NewRequest(r.Method, target.String()+r.URL.Path, r.Body)
+		proxyUrl := target.String() + r.URL.Path
+		if r.URL.RawQuery != "" {
+			proxyUrl += "?" + r.URL.RawQuery
+		}
+		proxyReq, err := http.NewRequest(r.Method, proxyUrl, r.Body)
 		if err != nil {
 			http.Error(w, "Error creating proxy request", http.StatusInternalServerError)
 			log.Printf("Error creating proxy request: %v", err)
