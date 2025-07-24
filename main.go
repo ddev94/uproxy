@@ -7,17 +7,18 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 func main() {
-	// Define the target URL to proxy to
 	targetURL := flag.String("target-url", "", "Target URL to proxy to (e.g., https://google.com)")
 	flag.Parse()
-	fmt.Println(*targetURL)
-
-	// Create a handler for proxying requests
+	if *targetURL == "" {
+		log.Fatal("Target URL is required")
+	}
+	fmt.Println("Proxying to:", *targetURL)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Parse the target URL
+
 		target, err := url.Parse(*targetURL)
 		if err != nil {
 			http.Error(w, "Invalid target URL", http.StatusInternalServerError)
@@ -26,55 +27,40 @@ func main() {
 		}
 
 		// Create a new request to the target
-		proxyUrl := target.String() + r.URL.Path
+		proxyURL := target.String() + r.URL.Path
 		if r.URL.RawQuery != "" {
-			proxyUrl += "?" + r.URL.RawQuery
+			proxyURL += "?" + r.URL.RawQuery
 		}
-		proxyReq, err := http.NewRequest(r.Method, proxyUrl, r.Body)
+		req, err := http.NewRequest(r.Method, proxyURL, r.Body)
 		if err != nil {
-			http.Error(w, "Error creating proxy request", http.StatusInternalServerError)
-			log.Printf("Error creating proxy request: %v", err)
-			return
+			fmt.Printf("client: could not create request: %s\n", err)
+			os.Exit(1)
 		}
 
-		// Copy headers from original request
-		for header, values := range r.Header {
-			for _, value := range values {
-				proxyReq.Header.Add(header, value)
-			}
-		}
-
-		// Create HTTP client and send the request
-		client := &http.Client{}
-		resp, err := client.Do(proxyReq)
+		res, err := http.DefaultClient.Do(req)
 		if err != nil {
-			http.Error(w, "Error forwarding request", http.StatusBadGateway)
-			log.Printf("Error forwarding request: %v", err)
-			return
-		}
-		defer resp.Body.Close()
-
-		// Copy response headers
-		for header, values := range resp.Header {
-			for _, value := range values {
-				w.Header().Add(header, value)
-			}
+			fmt.Printf("client: error making http request: %s\n", err)
+			os.Exit(1)
 		}
 
-		// Set status code
-		w.WriteHeader(resp.StatusCode)
+		fmt.Printf("client: got response!\n")
+		fmt.Printf("client: status code: %d\n", res.StatusCode)
 
-		// Copy response body
-		_, err = io.Copy(w, resp.Body)
+		resBody, err := io.ReadAll(res.Body)
 		if err != nil {
-			log.Printf("Error copying response body: %v", err)
+			fmt.Printf("client: could not read response body: %s\n", err)
+			os.Exit(1)
 		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Max-Age", "86400") // Cache preflight for 24 hours
+		w.WriteHeader(res.StatusCode)
+		w.Write(resBody)
 	})
 
-	// Start the server
-	port := 8080
-	log.Printf("Starting proxy server on :%d", port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil); err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", 8080), nil); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }

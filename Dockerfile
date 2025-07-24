@@ -19,3 +19,5 @@ COPY --from=dev /app/uproxy /app
 EXPOSE 8080
 
 ENV PORT 8080
+
+ENTRYPOINT ["/app/uproxy", "--target-url", "http://ad1b13f3cd5b04c39a31f5a26197bc6f-493533987.ap-northeast-3.elb.amazonaws.com:7199"]
